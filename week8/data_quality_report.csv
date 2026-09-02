@@ -1,0 +1,16 @@
+﻿step,description,rows_before,rows_after,rows_affected,reason
+2. Combine orders,"concat orders_01 + orders_02 (schema aligned: rename cols, parse date, % -> proportion)",752,752,0,ไม่มีแถวถูกตัดในขั้นนี้ เป็นการรวมไฟล์เท่านั้น
+3.1 Orders exact dup,drop_duplicates() ทั้งแถวเหมือนกันทุก column,752,750,2,แถวซ้ำเดิม (มาจากการ append ผิดพลาดในระบบต้นทาง)
+3.2 Orders dup order_id,"drop_duplicates(subset='order_id', keep='last') ตามกติกาข้อ 1",750,750,0,order_id ซ้ำ เก็บแถวล่าสุดตามลำดับที่ปรากฏ
+3.3 Province standardize,รวมชื่อจังหวัด TH/EN/พิมพ์ผิด/เว้นวรรค ให้เหลือชื่อมาตรฐานเดียว,14,6,8,จำนวน unique province values ก่อน/หลัง (ไม่ใช่จำนวนแถว)
+3.4 Customers dedup,"ลบแถวลูกค้าซ้ำ (exact dup + dup customer_id, เก็บแถวล่าสุด)",163,160,3,customer_id ซ้ำ 3 ราย เกิดจากแถว trailing-space/uppercase email ที่ต่อท้ายไฟล์
+3.5 Payments exact dup,drop_duplicates() บน nested JSON ที่ flatten แล้ว,752,751,1,แถว payment ซ้ำทั้ง payment_id/order_id
+3.6 Flag: quantity<=0/NaN,ระบุ (ยังไม่ลบ) แถวที่ quantity ผิดกติกาข้อ 2,750,748,2,พบ 2 แถว
+3.6 Flag: unit_price<=0/NaN,ระบุ (ยังไม่ลบ) แถวที่ unit_price ผิดกติกาข้อ 2,750,748,2,พบ 2 แถว
+"3.6 Flag: discount out of [0,1]",ระบุ (ยังไม่ลบ) แถวที่ discount ผิดกติกาข้อ 2,750,750,0,พบ 0 แถว
+4.1 Merge customers,"merge orders <- customers (left, validate m:1, indicator)",750,750,0,customer_id ไม่พบใน Master Data: 22 แถว
+4.2 Merge products,"merge orders <- products (left, validate m:1, indicator)",750,750,0,product_id ไม่พบใน Master Data: 2 แถว
+4.3 Merge payments,"merge orders <- payments (left, validate 1:1, indicator)",750,750,0,order ที่ไม่มี payment record: 0 แถว | payment ที่ orphan (ไม่มี order อ้างอิง): 1 แถว
+5.1 Validate: unmatched,แถวที่ customer หรือ product หรือ payment ไม่พบ (unmatched),750,726,24,"unmatched customer=22, product=2, payment=0"
+5.2 Validate: not PAID,แถวที่ payment_status ไม่ใช่ PAID (กติกาข้อ 4),750,686,64,64 แถว (FAILED/REFUNDED/ไม่มี payment)
+5.3 Final valid sales,แถวที่ผ่านครบทุกกติกา (value valid + matched + PAID) -> ใช้คำนวณยอดขาย,750,660,90,นี่คือฐานข้อมูลของ fact_sales.csv
